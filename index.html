@@ -110,12 +110,14 @@ async function shrink(file,max=1200){
  return c.toDataURL('image/jpeg',.8);
 }
 
+const dels=()=>{try{return JSON.parse(localStorage.getItem('dels')||'[]')}catch{return[]}};
 async function seed(){
  if(localStorage.getItem('seeded')){
   // 候補リストだけ毎回最新に更新
   try{const list=await (await fetch('seed/seed.json',{cache:'no-store'})).json();
    for(const s of list){const r=await new Promise(ok=>{const q=tx('readonly').get(s.id);q.onsuccess=()=>ok(q.result)});
-    if(r){r.cands=s.cands;await put(r)}}}catch{}
+    if(r){r.cands=s.cands;await put(r)}
+    else if(!dels().includes(s.id)){s.photos=await Promise.all(s.photos.map(async p=>await toData(await (await fetch('seed/'+p)).blob())));s.created=Date.now();await put(s)}}}catch{}
   return}
  try{const list=await (await fetch('seed/seed.json')).json();
   for(const it of list){it.photos=await Promise.all(it.photos.map(async p=>await toData(await (await fetch('seed/'+p)).blob())));
@@ -136,7 +138,7 @@ function render(){
  v.sort((a,b)=>b.created-a.created);
  $('#count').textContent=v.length+'件';
  $('#list').innerHTML=v.length?v.map(i=>`<div class="card" data-id="${i.id}">
-  <img src="${i.photos[0]?url(i.photos[0]):''}" alt="" loading="lazy">
+  <img src="${i.photos[0]?url(i.photos[0]):(i.cands?.[0]?.img||'')}" alt="" loading="lazy">
   <div class="t"><span class="badge">${STAT[i.status]}</span>${esc(i.name)}<div class="p">${i.price?'¥'+Number(i.price).toLocaleString():''} ${esc(i.shop||'')}</div></div></div>`).join('')
   :'<div class="empty">まだありません。右下の＋から写真を追加</div>';
 }
@@ -150,8 +152,8 @@ function showDetail(id){
  <div class="big">${esc(i.name)}</div>
  <div style="color:var(--sub)">${i.price?'¥'+Number(i.price).toLocaleString()+'（定価）':''} ${esc(i.shop||'')}</div>
  <div class="status">${Object.entries(STAT).map(([k,v])=>`<button data-s="${k}" class="${i.status===k?'on':''}">${v}</button>`).join('')}</div>
- ${i.cands?.length?`<label>Claudeが見つけた安い候補（メルカリ・売り切れの場合あり）</label>
- ${i.cands.map(c=>`<a class="btn" style="text-align:left;margin-bottom:6px" target="_blank" rel="noopener" href="${c.u}"><b>¥${c.p.toLocaleString()}</b>　${esc(c.t)}</a>`).join('')}`:''}
+ ${i.cands?.length?`<label>見つけた安い候補（自動チェック済み・安い順）</label>
+ ${i.cands.map(c=>`<a class="btn" style="display:flex;gap:10px;align-items:center;text-align:left;margin-bottom:6px" target="_blank" rel="noopener" href="${c.u}">${c.img?`<img src="${esc(c.img)}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" loading="lazy">`:''}<span><b>¥${(c.p||0).toLocaleString()}</b>${c.size?` <span class="badge">${esc(c.size)}</span>`:''}<br>${esc(c.t)}<br><small style="color:var(--sub)">${esc(c.chk||'')}${c.why?'・'+esc(c.why):''}</small></span></a>`).join('')}`:''}
  <div class="kw">🔎 ${esc(i.kw||i.name)}</div>
  <div class="grid2">
   <button class="btn main" data-a="lens">📷 Googleレンズで似た商品を探す</button>
@@ -181,6 +183,7 @@ function showDetail(id){
 $('#show').onclick=()=>$('#show').classList.remove('open');
 
 async function lens(i){
+ if(!i.photos[0]){alert('写真がありません。編集から写真を追加してください');return}
  const blob=await toBlob(i.photos[0]);const f=new File([blob],'fuku.jpg',{type:'image/jpeg'});
  if(navigator.canShare&&navigator.canShare({files:[f]})){
   try{await navigator.share({files:[f]});return}catch(e){if(e.name==='AbortError')return}
@@ -215,7 +218,7 @@ function showEdit(i){
   if(a==='photo'){read();$('#file').onchange=async ev=>{for(const f of ev.target.files)draft.photos.push(await shrink(f));ev.target.value='';draw()};$('#file').click()}
   if(a==='save'){read();if(!draft.name)draft.name=draft.kw||'名前なし';Object.assign(i,draft);await put(i);
    if(isNew)items.push(i);$('#edit').classList.remove('open');render();showDetail(i.id)}
-  if(a==='del'&&confirm('削除しますか？')){await del(i.id);items=items.filter(x=>x.id!==i.id);
+  if(a==='del'&&confirm('削除しますか？')){await del(i.id);try{localStorage.setItem('dels',JSON.stringify([...dels(),i.id]))}catch{}items=items.filter(x=>x.id!==i.id);
    $('#edit').classList.remove('open');$('#detail').classList.remove('open');render()}
  };
 }

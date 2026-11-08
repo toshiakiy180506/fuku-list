@@ -97,13 +97,17 @@ const getAll=()=>new Promise(ok=>{const r=tx('readonly').getAll();r.onsuccess=()
 const put=it=>new Promise(ok=>{const r=tx('readwrite').put(it);r.onsuccess=ok});
 const del=id=>new Promise(ok=>{const r=tx('readwrite').delete(id);r.onsuccess=ok});
 const urls=new Map();
-function url(blob){if(!urls.has(blob))urls.set(blob,URL.createObjectURL(blob));return urls.get(blob)}
+function url(p){if(typeof p==='string')return p;if(!urls.has(p))urls.set(p,URL.createObjectURL(p));return urls.get(p)}
+// iPhoneではIndexedDBのBlobを画像表示できないことがあるので、写真はdata URL文字列で持つ
+const toData=b=>new Promise(ok=>{const r=new FileReader();r.onload=()=>ok(r.result);r.readAsDataURL(b)});
+const toBlob=async p=>typeof p==='string'?await (await fetch(p)).blob():p;
+async function migrate(){for(const it of items){if(it.photos.some(p=>typeof p!=='string')){it.photos=await Promise.all(it.photos.map(p=>typeof p==='string'?p:toData(p)));await put(it)}}}
 
 async function shrink(file,max=1200){
  const img=await createImageBitmap(file);const s=Math.min(1,max/Math.max(img.width,img.height));
  const c=document.createElement('canvas');c.width=img.width*s;c.height=img.height*s;
  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
- return new Promise(ok=>c.toBlob(ok,'image/jpeg',.8));
+ return c.toDataURL('image/jpeg',.8);
 }
 
 async function seed(){
@@ -114,7 +118,7 @@ async function seed(){
     if(r){r.cands=s.cands;await put(r)}}}catch{}
   return}
  try{const list=await (await fetch('seed/seed.json')).json();
-  for(const it of list){it.photos=await Promise.all(it.photos.map(async p=>await (await fetch('seed/'+p)).blob()));
+  for(const it of list){it.photos=await Promise.all(it.photos.map(async p=>await toData(await (await fetch('seed/'+p)).blob())));
    it.created=Date.now()-list.indexOf(it);await put(it)}
  }catch(e){console.warn(e)}
  try{localStorage.setItem('seeded','1')}catch{}
@@ -166,7 +170,7 @@ function showDetail(id){
    const prompt=`この写真の「${i.name}」に似た商品を、メルカリ・ラクマ・Yahooフリマ・セカスト・ZOZOTOWN・GU・ユニクロから安い順に5つ探してください。\n特徴: ${i.kw||''}${i.memo?'\n'+i.memo:''}\n${i.price?`お店では${Number(i.price).toLocaleString()}円でした。それより安いもの限定。\n`:''}【必ずメンズ商品】レディース・クロップド丈・女性モデル着用の商品は除外。ユニセックスは可。\nサイズ: ${i.cat==='シューズ'?'メンズ26.0cm（UK7.5〜8）':'メンズのMかL'}。\n商品名・価格・サイズ・URLを表で。売り切れは除外。`;
    try{await navigator.clipboard.writeText(prompt)}catch{}
    alert('探してもらう文章をコピーしました。\n次に出る共有画面で「Gemini」か「ChatGPT」を選び、文章を貼り付けて送ってください。');
-   const f=new File([i.photos[0]],'fuku.jpg',{type:'image/jpeg'});
+   const f=new File([await toBlob(i.photos[0])],'fuku.jpg',{type:'image/jpeg'});
    if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]})}catch{}}
    else open('https://gemini.google.com/app','_blank');
   }
@@ -177,7 +181,7 @@ function showDetail(id){
 $('#show').onclick=()=>$('#show').classList.remove('open');
 
 async function lens(i){
- const blob=i.photos[0];const f=new File([blob],'fuku.jpg',{type:'image/jpeg'});
+ const blob=await toBlob(i.photos[0]);const f=new File([blob],'fuku.jpg',{type:'image/jpeg'});
  if(navigator.canShare&&navigator.canShare({files:[f]})){
   try{await navigator.share({files:[f]});return}catch(e){if(e.name==='AbortError')return}
  }
@@ -217,7 +221,7 @@ function showEdit(i){
 }
 $('#add').onclick=()=>showEdit(null);
 
-(async()=>{db=await openDB();await seed();items=await getAll();render();
+(async()=>{db=await openDB();await seed();items=await getAll();await migrate();render();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});})();
 </script>
 </body>

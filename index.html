@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>服リスト</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="服リスト">
+<meta name="theme-color" content="#1d1b19">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+:root{--bg:#f6f3ee;--card:#fff;--ink:#1d1b19;--sub:#7a736a;--line:#e4ddd2;--acc:#8a5a2b;--chip:#efe8dd}
+@media (prefers-color-scheme:dark){:root{--bg:#141312;--card:#1f1d1b;--ink:#f1ece4;--sub:#a39a8e;--line:#34302b;--acc:#d29a5e;--chip:#2b2824}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Sans",sans-serif;-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 10px) 16px 8px;border-bottom:1px solid var(--line)}
+h1{font-size:20px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.tabs button,.chip{border:0;background:var(--chip);color:var(--ink);padding:6px 12px;border-radius:99px;font-size:13px;white-space:nowrap}
+.tabs button.on{background:var(--ink);color:var(--bg)}
+main{padding:12px 16px 100px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.card{background:var(--card);border-radius:14px;overflow:hidden;border:1px solid var(--line);cursor:pointer}
+.card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:var(--chip)}
+.card .t{padding:8px 10px 10px;font-size:13px;line-height:1.35}
+.card .p{color:var(--sub);font-size:12px;margin-top:2px}
+.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:6px;background:var(--chip);color:var(--sub);margin-right:4px}
+.fab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 20px);width:58px;height:58px;border-radius:50%;border:0;background:var(--acc);color:#fff;font-size:30px;box-shadow:0 4px 14px #0004}
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:10;overflow-y:auto;display:none;padding:calc(env(safe-area-inset-top) + 8px) 16px calc(env(safe-area-inset-bottom) + 30px)}
+.sheet.open{display:block}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.bar button{border:0;background:none;color:var(--acc);font-size:16px;padding:8px 0}
+.photos{display:flex;gap:8px;overflow-x:auto;margin-bottom:12px}
+.photos img{height:300px;border-radius:12px;max-width:85vw;object-fit:cover}
+.big{font-size:22px;font-weight:700;margin:4px 0}
+.kw{background:var(--chip);border-radius:10px;padding:10px 12px;font-size:15px;margin:10px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.btn{display:block;text-align:center;text-decoration:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:12px 6px;border-radius:12px;font-size:14px}
+.btn.main{background:var(--ink);color:var(--bg);border-color:var(--ink);grid-column:1/-1;font-weight:600}
+label{display:block;font-size:12px;color:var(--sub);margin:12px 0 4px}
+input,textarea,select{width:100%;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font-family:inherit}
+.status{display:flex;gap:6px;margin:10px 0}
+.status button{flex:1;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px;border-radius:10px;font-size:14px}
+.status button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.memo{white-space:pre-wrap;color:var(--sub);font-size:14px;line-height:1.6}
+.show{position:fixed;inset:0;background:#000;z-index:20;display:none;flex-direction:column;justify-content:center;align-items:center;padding:20px}
+.show.open{display:flex}
+.show img{max-width:100%;max-height:70vh;border-radius:10px}
+.show p{color:#fff;font-size:22px;text-align:center;margin:16px 0 0;font-weight:700}
+.danger{color:#c33!important}
+.empty{grid-column:1/-1;text-align:center;color:var(--sub);padding:60px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>服リスト <span id="count" style="font-size:13px;color:var(--sub);font-weight:400"></span></h1>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main id="list"></main>
+<button class="fab" id="add" aria-label="追加">＋</button>
+
+<div class="sheet" id="detail"></div>
+<div class="sheet" id="edit"></div>
+<div class="show" id="show"></div>
+<input type="file" id="file" accept="image/*" multiple hidden>
+
+<script>
+const CATS=['アウター','トップス','ボトムス','シューズ','バッグ','小物'];
+const STAT={want:'欲しい',hold:'保留',got:'買った',pass:'見送り'};
+const SHOPS=[
+ ['メルカリ',q=>'https://jp.mercari.com/search?keyword='+q],
+ ['セカスト',q=>'https://www.2ndstreet.jp/search?keyword='+q],
+ ['ラクマ',q=>'https://fril.jp/s?query='+q],
+ ['Yahooフリマ',q=>'https://paypayfleamarket.yahoo.co.jp/search/'+q],
+ ['ZOZOTOWN',q=>'https://zozo.jp/search/?p_keyv='+q],
+ ['Googleショッピング',q=>'https://www.google.com/search?tbm=shop&q='+q],
+];
+let db,items=[],filter='all';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function openDB(){return new Promise((ok,ng)=>{const r=indexedDB.open('fuku',1);
+ r.onupgradeneeded=()=>r.result.createObjectStore('items',{keyPath:'id'});
+ r.onsuccess=()=>ok(r.result);r.onerror=()=>ng(r.error)})}
+const tx=m=>db.transaction('items',m).objectStore('items');
+const getAll=()=>new Promise(ok=>{const r=tx('readonly').getAll();r.onsuccess=()=>ok(r.result)});
+const put=it=>new Promise(ok=>{const r=tx('readwrite').put(it);r.onsuccess=ok});
+const del=id=>new Promise(ok=>{const r=tx('readwrite').delete(id);r.onsuccess=ok});
+const urls=new Map();
+function url(blob){if(!urls.has(blob))urls.set(blob,URL.createObjectURL(blob));return urls.get(blob)}
+
+async function shrink(file,max=1200){
+ const img=await createImageBitmap(file);const s=Math.min(1,max/Math.max(img.width,img.height));
+ const c=document.createElement('canvas');c.width=img.width*s;c.height=img.height*s;
+ c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+ return new Promise(ok=>c.toBlob(ok,'image/jpeg',.8));
+}
+
+async function seed(){
+ if(localStorage.getItem('seeded'))return;
+ try{const list=await (await fetch('seed/seed.json')).json();
+  for(const it of list){it.photos=await Promise.all(it.photos.map(async p=>await (await fetch('seed/'+p)).blob()));
+   it.created=Date.now()-list.indexOf(it);await put(it)}
+ }catch(e){console.warn(e)}
+ try{localStorage.setItem('seeded','1')}catch{}
+}
+
+function renderTabs(){
+ const t=[['all','すべて'],['want','欲しい'],['hold','保留'],['got','買った'],...CATS.map(c=>['c:'+c,c])];
+ $('#tabs').innerHTML=t.map(([k,v])=>`<button class="${k===filter?'on':''}" data-k="${k}">${v}</button>`).join('');
+}
+$('#tabs').onclick=e=>{const k=e.target.dataset.k;if(k){filter=k;render()}};
+
+function render(){
+ renderTabs();
+ let v=items.filter(i=>filter==='all'?i.status!=='pass':filter.startsWith('c:')?i.cat===filter.slice(2):i.status===filter);
+ v.sort((a,b)=>b.created-a.created);
+ $('#count').textContent=v.length+'件';
+ $('#list').innerHTML=v.length?v.map(i=>`<div class="card" data-id="${i.id}">
+  <img src="${i.photos[0]?url(i.photos[0]):''}" alt="" loading="lazy">
+  <div class="t"><span class="badge">${STAT[i.status]}</span>${esc(i.name)}<div class="p">${i.price?'¥'+Number(i.price).toLocaleString():''} ${esc(i.shop||'')}</div></div></div>`).join('')
+  :'<div class="empty">まだありません。右下の＋から写真を追加</div>';
+}
+$('#list').onclick=e=>{const c=e.target.closest('.card');if(c)showDetail(c.dataset.id)};
+
+function showDetail(id){
+ const i=items.find(x=>x.id===id);const q=encodeURIComponent(i.kw||i.name);
+ $('#detail').innerHTML=`<div class="bar"><button data-a="close">‹ 戻る</button><button data-a="edit">編集</button></div>
+ <div class="photos">${i.photos.map(p=>`<img src="${url(p)}">`).join('')}</div>
+ <div><span class="badge">${esc(i.cat)}</span>${i.coord?`<span class="badge">${esc(i.coord)}</span>`:''}</div>
+ <div class="big">${esc(i.name)}</div>
+ <div style="color:var(--sub)">${i.price?'¥'+Number(i.price).toLocaleString()+'（定価）':''} ${esc(i.shop||'')}</div>
+ <div class="status">${Object.entries(STAT).map(([k,v])=>`<button data-s="${k}" class="${i.status===k?'on':''}">${v}</button>`).join('')}</div>
+ <div class="kw">🔎 ${esc(i.kw||i.name)}</div>
+ <div class="grid2">
+  <button class="btn main" data-a="lens">📷 Googleレンズで似た商品を探す</button>
+  ${SHOPS.map(([n,f])=>`<a class="btn" target="_blank" rel="noopener" href="${f(q)}">${n}</a>`).join('')}
+  <button class="btn main" data-a="show" style="background:var(--acc);border-color:var(--acc)">🏬 店員さんに見せる</button>
+ </div>
+ ${i.memo?`<label>メモ</label><div class="memo">${esc(i.memo)}</div>`:''}`;
+ $('#detail').classList.add('open');
+ $('#detail').onclick=async e=>{
+  const a=e.target.dataset.a,s=e.target.dataset.s;
+  if(a==='close'){$('#detail').classList.remove('open')}
+  if(a==='edit'){showEdit(i)}
+  if(a==='lens'){lens(i)}
+  if(a==='show'){$('#show').innerHTML=`<img src="${url(i.photos[0])}"><p>${esc(i.kw||i.name)}</p><p style="font-size:15px;color:#aaa">こういうのを探しています</p>`;$('#show').classList.add('open')}
+  if(s){i.status=s;await put(i);showDetail(id);render()}
+ };
+}
+$('#show').onclick=()=>$('#show').classList.remove('open');
+
+async function lens(i){
+ const blob=i.photos[0];const f=new File([blob],'fuku.jpg',{type:'image/jpeg'});
+ if(navigator.canShare&&navigator.canShare({files:[f]})){
+  try{await navigator.share({files:[f]});return}catch(e){if(e.name==='AbortError')return}
+ }
+ // PC等: Googleレンズへ画像を直接アップロード
+ const form=document.createElement('form');form.method='POST';form.enctype='multipart/form-data';
+ form.action='https://lens.google.com/v3/upload';form.target='_blank';
+ const inp=document.createElement('input');inp.type='file';inp.name='encoded_image';
+ const dt=new DataTransfer();dt.items.add(f);inp.files=dt.files;form.append(inp);
+ document.body.append(form);form.submit();form.remove();
+}
+
+function showEdit(i){
+ const isNew=!i;i=i||{id:crypto.randomUUID(),photos:[],status:'want',cat:'トップス',created:Date.now()};
+ const draft={...i,photos:[...i.photos]};
+ const draw=()=>{$('#edit').innerHTML=`<div class="bar"><button data-a="cancel">キャンセル</button><b>${isNew?'追加':'編集'}</b><button data-a="save">保存</button></div>
+ <div class="photos">${draft.photos.map((p,n)=>`<img src="${url(p)}" data-n="${n}" title="タップで削除">`).join('')}<button class="chip" data-a="photo" style="height:300px;min-width:120px">＋写真</button></div>
+ <label>名前</label><input id="f_name" value="${esc(draft.name)}" placeholder="例: 黒スエードのワラビー">
+ <label>検索ワード（メルカリ・セカスト等で使う）</label><input id="f_kw" value="${esc(draft.kw)}" placeholder="例: ワラビー ゴアテックス 黒">
+ <label>カテゴリ</label><select id="f_cat">${CATS.map(c=>`<option ${c===draft.cat?'selected':''}>${c}</option>`).join('')}</select>
+ <label>定価・見つけた値段（円）</label><input id="f_price" inputmode="numeric" value="${esc(draft.price)}">
+ <label>見た店</label><input id="f_shop" value="${esc(draft.shop)}">
+ <label>コーデ名（同じコーデのアイテムをまとめる）</label><input id="f_coord" value="${esc(draft.coord)}" placeholder="例: グレーコートのコーデ">
+ <label>メモ</label><textarea id="f_memo" rows="4">${esc(draft.memo)}</textarea>
+ ${isNew?'':'<button class="btn danger" data-a="del" style="width:100%;margin-top:24px">削除</button>'}`};
+ const read=()=>['name','kw','cat','price','shop','coord','memo'].forEach(k=>draft[k]=$('#f_'+k).value.trim());
+ draw();$('#edit').classList.add('open');
+ $('#edit').onclick=async e=>{
+  const a=e.target.dataset.a,n=e.target.dataset.n;
+  if(n!==undefined&&confirm('この写真を外しますか？')){read();draft.photos.splice(+n,1);draw()}
+  if(a==='cancel')$('#edit').classList.remove('open');
+  if(a==='photo'){read();$('#file').onchange=async ev=>{for(const f of ev.target.files)draft.photos.push(await shrink(f));ev.target.value='';draw()};$('#file').click()}
+  if(a==='save'){read();if(!draft.name)draft.name=draft.kw||'名前なし';Object.assign(i,draft);await put(i);
+   if(isNew)items.push(i);$('#edit').classList.remove('open');render();showDetail(i.id)}
+  if(a==='del'&&confirm('削除しますか？')){await del(i.id);items=items.filter(x=>x.id!==i.id);
+   $('#edit').classList.remove('open');$('#detail').classList.remove('open');render()}
+ };
+}
+$('#add').onclick=()=>showEdit(null);
+
+(async()=>{db=await openDB();await seed();items=await getAll();render();
+ if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});})();
+</script>
+</body>
+</html>

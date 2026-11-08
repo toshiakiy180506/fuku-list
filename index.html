@@ -72,7 +72,7 @@ const SHOPS=[
  ['セカスト',q=>'https://www.2ndstreet.jp/search?keyword='+q],
  ['ラクマ',q=>'https://fril.jp/s?query='+q],
  ['Yahooフリマ',q=>'https://paypayfleamarket.yahoo.co.jp/search/'+q],
- ['ZOZOTOWN',q=>'https://zozo.jp/search/?p_keyv='+q],
+ ['ZOZOTOWN',q=>'https://www.google.com/search?q=site%3Azozo.jp+'+q],
  ['Googleショッピング',q=>'https://www.google.com/search?tbm=shop&q='+q],
 ];
 let db,items=[],filter='all';
@@ -97,7 +97,12 @@ async function shrink(file,max=1200){
 }
 
 async function seed(){
- if(localStorage.getItem('seeded'))return;
+ if(localStorage.getItem('seeded')){
+  // 候補リストだけ毎回最新に更新
+  try{const list=await (await fetch('seed/seed.json',{cache:'no-store'})).json();
+   for(const s of list){const r=await new Promise(ok=>{const q=tx('readonly').get(s.id);q.onsuccess=()=>ok(q.result)});
+    if(r){r.cands=s.cands;await put(r)}}}catch{}
+  return}
  try{const list=await (await fetch('seed/seed.json')).json();
   for(const it of list){it.photos=await Promise.all(it.photos.map(async p=>await (await fetch('seed/'+p)).blob()));
    it.created=Date.now()-list.indexOf(it);await put(it)}
@@ -131,6 +136,8 @@ function showDetail(id){
  <div class="big">${esc(i.name)}</div>
  <div style="color:var(--sub)">${i.price?'¥'+Number(i.price).toLocaleString()+'（定価）':''} ${esc(i.shop||'')}</div>
  <div class="status">${Object.entries(STAT).map(([k,v])=>`<button data-s="${k}" class="${i.status===k?'on':''}">${v}</button>`).join('')}</div>
+ ${i.cands?.length?`<label>Claudeが見つけた安い候補（メルカリ・売り切れの場合あり）</label>
+ ${i.cands.map(c=>`<a class="btn" style="text-align:left;margin-bottom:6px" target="_blank" rel="noopener" href="${c.u}"><b>¥${c.p.toLocaleString()}</b>　${esc(c.t)}</a>`).join('')}`:''}
  <div class="kw">🔎 ${esc(i.kw||i.name)}</div>
  <div class="grid2">
   <button class="btn main" data-a="lens">📷 Googleレンズで似た商品を探す</button>

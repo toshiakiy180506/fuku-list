@@ -72,10 +72,20 @@ const SHOPS=[
  ['セカスト',q=>'https://www.2ndstreet.jp/search?keyword='+q],
  ['ラクマ',q=>'https://fril.jp/s?query='+q],
  ['Yahooフリマ',q=>'https://paypayfleamarket.yahoo.co.jp/search/'+q],
- ['ZOZOTOWN',q=>'https://www.google.com/search?q=site%3Azozo.jp+'+q],
+ ['ZOZOTOWN',(q,raw)=>'https://zozo.jp/search/?p_keyv='+sjis(raw)],
  ['Googleショッピング',q=>'https://www.google.com/search?tbm=shop&q='+q],
 ];
-let db,items=[],filter='all';
+let db,items=[],filter='all',SJ;
+// ZOZOはShift_JISで検索ワードを受け取るので、自前で変換表を作る
+function sjis(s){
+ if(!SJ){SJ=new Map();const d=new TextDecoder('shift_jis');
+  for(let a=0x81;a<=0xFC;a++){if(a>0x9F&&a<0xE0)continue;for(let b=0x40;b<=0xFC;b++){if(b===0x7F)continue;
+   const c=d.decode(new Uint8Array([a,b]));if(c.length===1&&c!=='�'&&!SJ.has(c))SJ.set(c,[a,b])}}
+  for(let a=0xA1;a<=0xDF;a++)SJ.set(d.decode(new Uint8Array([a])),[a])}
+ let o='';for(const ch of s){if(ch===' '||ch==='　'){o+='+';continue}
+  const b=ch.charCodeAt(0)<0x80?null:SJ.get(ch);
+  o+=b?b.map(x=>'%'+x.toString(16).toUpperCase()).join(''):encodeURIComponent(ch)}
+ return o}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -141,7 +151,8 @@ function showDetail(id){
  <div class="kw">🔎 ${esc(i.kw||i.name)}</div>
  <div class="grid2">
   <button class="btn main" data-a="lens">📷 Googleレンズで似た商品を探す</button>
-  ${SHOPS.map(([n,f])=>`<a class="btn" target="_blank" rel="noopener" href="${f(q)}">${n}</a>`).join('')}
+  ${SHOPS.map(([n,f])=>`<a class="btn" target="_blank" rel="noopener" href="${f(q,i.kw||i.name)}">${n}</a>`).join('')}
+  <button class="btn main" data-a="ai" style="background:#4b6bd6;border-color:#4b6bd6;color:#fff">🤖 AI（Gemini等）に安い似た品を探してもらう</button>
   <button class="btn main" data-a="show" style="background:var(--acc);border-color:var(--acc)">🏬 店員さんに見せる</button>
  </div>
  ${i.memo?`<label>メモ</label><div class="memo">${esc(i.memo)}</div>`:''}`;
@@ -151,6 +162,14 @@ function showDetail(id){
   if(a==='close'){$('#detail').classList.remove('open')}
   if(a==='edit'){showEdit(i)}
   if(a==='lens'){lens(i)}
+  if(a==='ai'){
+   const prompt=`この写真の「${i.name}」に似た商品を、メルカリ・ラクマ・Yahooフリマ・セカスト・ZOZOTOWN・GU・ユニクロから安い順に5つ探してください。\n特徴: ${i.kw||''}${i.memo?'\n'+i.memo:''}\n${i.price?`お店では${Number(i.price).toLocaleString()}円でした。それより安いもの限定。\n`:''}サイズ: ${i.cat==='シューズ'?'26.0cm（UK7.5〜8）':'MかL'}。\n商品名・価格・サイズ・URLを表で。売り切れは除外。`;
+   try{await navigator.clipboard.writeText(prompt)}catch{}
+   alert('探してもらう文章をコピーしました。\n次に出る共有画面で「Gemini」か「ChatGPT」を選び、文章を貼り付けて送ってください。');
+   const f=new File([i.photos[0]],'fuku.jpg',{type:'image/jpeg'});
+   if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]})}catch{}}
+   else open('https://gemini.google.com/app','_blank');
+  }
   if(a==='show'){$('#show').innerHTML=`<img src="${url(i.photos[0])}"><p>${esc(i.kw||i.name)}</p><p style="font-size:15px;color:#aaa">こういうのを探しています</p>`;$('#show').classList.add('open')}
   if(s){i.status=s;await put(i);showDetail(id);render()}
  };

@@ -139,7 +139,7 @@ function render(){
 $('#list').onclick=e=>{const c=e.target.closest('.card');if(c)showDetail(c.dataset.id)};
 
 function showDetail(id){
- const i=items.find(x=>x.id===id);const q=encodeURIComponent(i.kw||i.name);
+ const i=items.find(x=>x.id===id);const kwm=(i.kw||i.name)+(/メンズ|ユニセックス/.test(i.kw||'')||i.cat==='バッグ'?'':' メンズ');const q=encodeURIComponent(kwm);
  $('#detail').innerHTML=`<div class="bar"><button data-a="close">‹ 戻る</button><button data-a="edit">編集</button></div>
  <div class="photos">${i.photos.map(p=>`<img src="${url(p)}">`).join('')}</div>
  <div><span class="badge">${esc(i.cat)}</span>${i.coord?`<span class="badge">${esc(i.coord)}</span>`:''}</div>
@@ -151,7 +151,7 @@ function showDetail(id){
  <div class="kw">🔎 ${esc(i.kw||i.name)}</div>
  <div class="grid2">
   <button class="btn main" data-a="lens">📷 Googleレンズで似た商品を探す</button>
-  ${SHOPS.map(([n,f])=>`<a class="btn" target="_blank" rel="noopener" href="${f(q,i.kw||i.name)}">${n}</a>`).join('')}
+  ${SHOPS.map(([n,f])=>`<a class="btn" target="_blank" rel="noopener" href="${f(q,kwm)}">${n}</a>`).join('')}
   <button class="btn main" data-a="ai" style="background:#4b6bd6;border-color:#4b6bd6;color:#fff">🤖 AI（Gemini等）に安い似た品を探してもらう</button>
   <button class="btn main" data-a="show" style="background:var(--acc);border-color:var(--acc)">🏬 店員さんに見せる</button>
  </div>
@@ -163,7 +163,7 @@ function showDetail(id){
   if(a==='edit'){showEdit(i)}
   if(a==='lens'){lens(i)}
   if(a==='ai'){
-   const prompt=`この写真の「${i.name}」に似た商品を、メルカリ・ラクマ・Yahooフリマ・セカスト・ZOZOTOWN・GU・ユニクロから安い順に5つ探してください。\n特徴: ${i.kw||''}${i.memo?'\n'+i.memo:''}\n${i.price?`お店では${Number(i.price).toLocaleString()}円でした。それより安いもの限定。\n`:''}サイズ: ${i.cat==='シューズ'?'26.0cm（UK7.5〜8）':'MかL'}。\n商品名・価格・サイズ・URLを表で。売り切れは除外。`;
+   const prompt=`この写真の「${i.name}」に似た商品を、メルカリ・ラクマ・Yahooフリマ・セカスト・ZOZOTOWN・GU・ユニクロから安い順に5つ探してください。\n特徴: ${i.kw||''}${i.memo?'\n'+i.memo:''}\n${i.price?`お店では${Number(i.price).toLocaleString()}円でした。それより安いもの限定。\n`:''}【必ずメンズ商品】レディース・クロップド丈・女性モデル着用の商品は除外。ユニセックスは可。\nサイズ: ${i.cat==='シューズ'?'メンズ26.0cm（UK7.5〜8）':'メンズのMかL'}。\n商品名・価格・サイズ・URLを表で。売り切れは除外。`;
    try{await navigator.clipboard.writeText(prompt)}catch{}
    alert('探してもらう文章をコピーしました。\n次に出る共有画面で「Gemini」か「ChatGPT」を選び、文章を貼り付けて送ってください。');
    const f=new File([i.photos[0]],'fuku.jpg',{type:'image/jpeg'});
